@@ -1,3 +1,6 @@
+/* (C) folkert van heusden
+ * released under AGPL v3.0
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
