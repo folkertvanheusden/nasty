@@ -180,8 +180,6 @@ gpgme_error_t passphrase_cb(void *hook, const char *uid_hint, const char *passph
 	}
 	else if (mode == MODE_FILE)
 	{
-	        /* diff by Sharif Olorin <siolorin@gmail.com> to 
-		 * preserve spaces */ 
 		pp_file_in_offset = ftell(pp_file_in_fh);
 
 		char c;
@@ -197,12 +195,6 @@ gpgme_error_t passphrase_cb(void *hook, const char *uid_hint, const char *passph
 			not_found();
 			exit(1);
 		}
-		/* original code */
-		/*if (!fgets(passphrase, MAX_PP_LEN, pp_file_in_fh))
-		{
-			not_found();
-			exit(1);
-		}*/
 	}
 
 	if (mode != MODE_FILE)
@@ -387,7 +379,7 @@ int main(int argc, char *argv[])
 	char		charset_set = 0;
 	char		*key_filter_string = NULL;
 
-	printf("nasty v" VERSION ", (C) 2005 by folkert@vanheusden.com\n\n");
+	printf("nasty v" VERSION ", (C) 2005-2017 by folkert@vanheusden.com\n\n");
 
 	start = then;
 	srand(then);
@@ -512,7 +504,6 @@ skip_switches:
 	signal(SIGKILL, sighandler);
 
 	(void)gpgme_check_version(NULL);
-	//	err = gpgme_check_engine();
 	err = gpgme_new(&ctx);
 	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_new failed", err);
 
