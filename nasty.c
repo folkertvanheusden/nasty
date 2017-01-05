@@ -352,6 +352,29 @@ void usage(void)
 	fprintf(stderr, "	0: 0-9\n");
 	fprintf(stderr, "	.: all ascii values (32...126)\n");
 	fprintf(stderr, "	+: 32...255 (default(!))\n");
+	fprintf(stderr, "-k x	filter string to select a key\n");
+}
+
+void filter_keys_and_select_first(gpgme_ctx_t context, const char *key_filter_string, gpgme_key_t *selected_key)
+{
+	gpgme_error_t err;
+	gpgme_key_t key;
+
+	err = gpgme_op_keylist_start(context, key_filter_string, 1);
+	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_op_keylist_start failed", err);
+	err = gpgme_op_keylist_next(context, &key);
+	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_op_keylist_next failed", err);
+	err = gpgme_op_keylist_end(context);
+	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_op_keylist_end failed", err);
+	err = gpgme_signers_add(context, key);
+	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_signers_add failed", err);
+	gpgme_key_unref(key);
+
+	printf ("Using %s:", key->subkeys->keyid);
+	if (key->uids && key->uids->name) printf(" %s", key->uids->name);
+	if (key->uids && key->uids->email) printf(" <%s>", key->uids->email);
+	putchar ('\n');
+	*selected_key = key;
 }
 
 int main(int argc, char *argv[])
@@ -362,6 +385,7 @@ int main(int argc, char *argv[])
 	time_t		start, then = time(NULL);
 	int		c, loop;
 	char		charset_set = 0;
+	char		*key_filter_string = NULL;
 
 	printf("nasty v" VERSION ", (C) 2005 by folkert@vanheusden.com\n\n");
 
@@ -387,7 +411,7 @@ int main(int argc, char *argv[])
 		goto skip_switches;
 	}
 
-	while((c = getopt(argc, argv, "a:b:m:c:f:i:h")) != -1)
+	while((c = getopt(argc, argv, "a:b:m:c:f:i:k:h")) != -1)
 	{
 		switch(c)
 		{
@@ -454,6 +478,10 @@ int main(int argc, char *argv[])
 				pp_file_in = optarg;
 				break;
 
+			case 'k':
+				key_filter_string = optarg;
+				break;
+
 			case '?':
 			case 'h':
 				usage();
@@ -495,6 +523,9 @@ skip_switches:
 
 	gpgme_set_passphrase_cb(ctx, passphrase_cb, NULL);
 
+	gpgme_key_t selected_key;
+	filter_keys_and_select_first(ctx, key_filter_string, &selected_key);
+
 	do
 	{
 		err = gpgme_op_sign(ctx, in, out, GPGME_SIG_MODE_DETACH);
@@ -507,6 +538,7 @@ skip_switches:
 		}
 	}
 	while(err != 0);
+	gpgme_key_unref(selected_key);
 
 	if (err == 0)
 		printf("Passphrase is: %s\n", passphrase);
