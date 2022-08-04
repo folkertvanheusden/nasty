@@ -31,7 +31,7 @@ long pp_file_in_offset = 0;	/* this kludge is to make sure we have the file-
 				 */
 char *pp_file_out = NULL;
 
-unsigned char charset[256];
+unsigned char charset[256] = { 0 };
 int charset_n = 1;
 
 int mode = MODE_INCREMENTAL;
@@ -183,18 +183,20 @@ gpgme_error_t passphrase_cb(void *hook, const char *uid_hint, const char *passph
 	}
 	else if (mode == MODE_FILE)
 	{
+		char *p = NULL;
+
 		pp_file_in_offset = ftell(pp_file_in_fh);
 
-		char c;
-		int idx = 0;
-		while ((c=fgetc(pp_file_in_fh)) != '\n' 
-		       && c != -1 
-		       && idx < MAX_PP_LEN) {
-		        passphrase[idx] = c;
-			++idx;
-		}
-		passphrase[idx] = '\0';
-		if (idx == 0) {
+		fgets((char *)passphrase, sizeof passphrase, pp_file_in_fh);
+
+		p = strchr((char *)passphrase, '\r');
+		if (p)
+			*p = 0x00;
+		p = strchr((char *)passphrase, '\n');
+		if (p)
+			*p = 0x00;
+
+		if (passphrase[0] == 0x00) {
 			not_found();
 			exit(1);
 		}
@@ -382,7 +384,7 @@ int main(int argc, char *argv[])
 	char		charset_set = 0;
 	char		*key_filter_string = NULL;
 
-	printf("nasty v" VERSION ", (C) 2005-2017 by folkert@vanheusden.com\n\n");
+	printf("nasty v" VERSION ", (C) 2005-2022 by folkert@vanheusden.com\n\n");
 
 	start = then;
 	srand(then);
@@ -514,6 +516,9 @@ skip_switches:
 	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_data_new_from_mem failed", err);
 	err = gpgme_data_new(&out);
 	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_data_new failed", err);
+
+	err = gpgme_set_pinentry_mode(ctx, GPGME_PINENTRY_MODE_LOOPBACK);
+	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_set_pinentry_mode failed", err);
 
 	gpgme_set_passphrase_cb(ctx, passphrase_cb, NULL);
 
