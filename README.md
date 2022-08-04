@@ -4,3 +4,5 @@ http://www.gnupg.org/related_software/gpgme/index.html
 
 
 --- folkert@vanheusden.com
+
+this program is public domain

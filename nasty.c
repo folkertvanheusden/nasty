@@ -1,5 +1,5 @@
 /* (C) folkert van heusden
- * released under AGPL v3.0
+ * released in the public domain
  */
 #include <stdio.h>
 #include <stdlib.h>
