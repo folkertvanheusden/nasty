@@ -17,8 +17,8 @@
 
 #define MAX_PP_LEN		128
 
-unsigned char passphrase[MAX_PP_LEN + 2];
-unsigned char passphrase_template[MAX_PP_LEN + 2];
+unsigned char passphrase[MAX_PP_LEN + 2] = { 0 };
+unsigned char passphrase_template[MAX_PP_LEN + 2] = { 0 };
 int min_length = 1;
 int max_length = MAX_PP_LEN;
 
@@ -36,6 +36,8 @@ int charset_n = 1;
 
 int mode = MODE_INCREMENTAL;
 /* int mode = MODE_RANDOM; */
+
+char verbose = 0;
 
 long long int n_done = 0;
 
@@ -206,13 +208,19 @@ gpgme_error_t passphrase_cb(void *hook, const char *uid_hint, const char *passph
 	{
 		for(loop=0; loop<len; loop++)
 			passphrase[loop] = charset[passphrase_template[loop]];
+
 		passphrase[loop] = 0x00;
 	}
 
 	n_done++;
 
+	if (verbose)
+		printf("trying [%s]\n", passphrase);
+
 	strcat((char *)passphrase, "\n");
-	write(fd, (char *)passphrase, strlen((char *)passphrase));
+
+	if (write(fd, (char *)passphrase, strlen((char *)passphrase)) == -1)
+		error_exit("Failed sending passphrase to gpg(me)", errno);
 
 	return 0;
 }
@@ -350,6 +358,7 @@ void usage(void)
 	fprintf(stderr, "	.: all ascii values (32...126)\n");
 	fprintf(stderr, "	+: 32...255 (default(!))\n");
 	fprintf(stderr, "-k x	filter string to select a key\n");
+	fprintf(stderr, "-v 	enable verbose mode\n");
 }
 
 void filter_keys_and_select_first(gpgme_ctx_t context, const char *key_filter_string, gpgme_key_t *selected_key)
@@ -382,7 +391,7 @@ int main(int argc, char *argv[])
 	time_t		start, then = time(NULL);
 	int		c, loop;
 	char		charset_set = 0;
-	char		*key_filter_string = NULL;
+	char	       *key_filter_string = NULL;
 
 	printf("nasty v" VERSION ", (C) 2005-2022 by folkert@vanheusden.com\n\n");
 
@@ -408,7 +417,7 @@ int main(int argc, char *argv[])
 		goto skip_switches;
 	}
 
-	while((c = getopt(argc, argv, "a:b:m:c:f:i:k:h")) != -1)
+	while((c = getopt(argc, argv, "a:b:m:c:f:i:k:hv")) != -1)
 	{
 		switch(c)
 		{
@@ -479,6 +488,10 @@ int main(int argc, char *argv[])
 				key_filter_string = optarg;
 				break;
 
+			case 'v':
+				verbose = 1;
+				break;
+
 			case '?':
 			case 'h':
 				usage();
@@ -509,6 +522,7 @@ skip_switches:
 	signal(SIGKILL, sighandler);
 
 	(void)gpgme_check_version(NULL);
+
 	err = gpgme_new(&ctx);
 	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_new failed", err);
 
@@ -520,29 +534,38 @@ skip_switches:
 	err = gpgme_set_pinentry_mode(ctx, GPGME_PINENTRY_MODE_LOOPBACK);
 	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_set_pinentry_mode failed", err);
 
+	err = gpgme_set_ctx_flag(ctx, "no-symkey-cache", "1");
+	if (err != GPG_ERR_NO_ERROR) error_exit("gpgme_set_ctx_flag failed", err);
+
 	gpgme_set_passphrase_cb(ctx, passphrase_cb, NULL);
 
 	gpgme_key_t selected_key;
 	filter_keys_and_select_first(ctx, key_filter_string, &selected_key);
 
+	/* instruct gpg-agent to forget any cached passphrase */
+	system("gpg-connect-agent reloadagent /bye");
+
 	do
 	{
 		err = gpgme_op_sign(ctx, in, out, GPGME_SIG_MODE_DETACH);
 
-		if ((time(NULL) - then) > 2)
+		if (time(NULL) - then >= 2)
 		{
+			printf("# tried: %lld (%f per second), last tried: %s          \r", n_done, n_done / (double)(then - start), passphrase);
+
 			then = time(NULL);
-			printf("# tried: %lld (%f per second), last tried: %s\r", n_done, n_done / (double)(then - start), passphrase);
+
 			fflush(stdout);
 		}
 	}
 	while(err != 0);
+
 	gpgme_key_unref(selected_key);
 
 	if (err == 0)
-		printf("Passphrase is: %s\n", passphrase);
+		printf("\n\nPassphrase is: %s\n", passphrase);
 	else
-		error_exit("gpgme_op_sign failed", err);
+		error_exit("\n\ngpgme_op_sign failed", err);
 
 	if (pp_file_out)
 	{
